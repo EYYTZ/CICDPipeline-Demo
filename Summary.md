@@ -36,8 +36,12 @@ git branch -M main
 ### 1. 建立核心程式 (`app.py`)
 撰寫專案的商業邏輯（例如 `add_numbers` 函式），作為未來要上線運行的主程式。
 
-### 2. 建立測試程式 (`CICDTest.py`)
-引入 Python 內建的 `unittest` 模組，並從 `app.py` 匯入要測試的函式，編寫測試案例。這個檔案將在 CI 階段扮演「防護網」的角色。
+### 2. 建立測試程式集 (`CICDTest.py` 與 `EdgeCaseTest.py`)
+引入 Python 內建的 `unittest` 模組，並從 `app.py` 匯入要測試的函式，編寫正常情境與**邊界特例 (Edge Cases)** 的測試案例。
+實務上會將測試拆分為多個檔案，讓 CI 階段具備更嚴密且好維護的「防護網」。
+
+### 3. 建立依賴套件清單 (`requirements.txt`)
+統一管理專案所需的第三方套件。未來有任何新套件（如 Flask, FastAPI），只要加進此檔案，CI/CD 與 Docker 就會自動讀取並安裝。
 
 ---
 
@@ -50,7 +54,8 @@ git branch -M main
 1. `FROM python:3.10-slim` (使用輕量級 Python 基礎環境)
 2. `WORKDIR /app` (設定容器內工作目錄)
 3. `COPY . /app` (將本機程式碼複製進容器)
-4. `CMD ["python", "app.py"]` (設定容器啟動時執行的預設指令)
+4. `RUN pip install --no-cache-dir -r requirements.txt` (讀取套件清單並安裝依賴)
+5. `CMD ["python", "app.py"]` (設定容器啟動時執行的預設指令)
 
 ---
 
@@ -77,8 +82,9 @@ gh repo create CICDPipeline-Demo --public --source=. --remote=origin --push
 * **執行步驟**：
   1. 拉取程式碼 (`actions/checkout`)
   2. 建立 Python 3.10 環境 (`actions/setup-python`)
-  3. 執行語法檢查 (`py_compile`)
-  4. **執行單元測試** (`python -m unittest CICDTest.py`) ➔ 若測試失敗，流程立即終止！
+  3. **安裝依賴套件** (`pip install -r requirements.txt`) ➔ 確保測試環境與本機一致，並啟用 pip cache 加速流程。
+  4. 執行語法檢查 (`py_compile`)
+  5. **執行單元測試** (`python -m unittest discover -p "*Test.py"`) ➔ 自動探索並執行所有測試檔，若任一測試失敗，流程立即終止！
 
 ### Job 2: `deployment` (持續佈署 - CD)
 * **觸發條件**：必須等 `integration` 階段成功 (`needs: integration`) 才會執行。
@@ -92,12 +98,12 @@ gh repo create CICDPipeline-Demo --public --source=. --remote=origin --push
 ## 📌 第六階段：測試與驗證 CI/CD 流程
 
 ### 1. 測試 CI 防禦機制 (故意破壞)
-* 修改 `CICDTest.py`，故意將預期結果寫錯（例如改為 `999`）。
+* 新增或修改測試檔（例如在 `EdgeCaseTest.py` 寫入錯誤斷言），故意推送會失敗的特例。
 * `git commit` 並 `push` 到 GitHub。
 * **結果觀察**：GitHub Actions 中 `integration` 階段會亮紅燈 ❌，且 `deployment` 階段不會被執行。成功阻擋壞代碼！
 
 ### 2. 測試 CD 自動打包 (修復並放行)
-* 將測試代碼修復回正確數值。
+* 讀取 CI 的錯誤報告 (Traceback) 定位錯誤點，並將測試代碼修復。
 * 再次 `push` 到 GitHub。
 * **結果觀察**：CI 階段通過 ✅，接著 CD 階段成功將 Docker Image 打包，並發布在專案首頁右下角的 **Packages** 區塊中！
 
