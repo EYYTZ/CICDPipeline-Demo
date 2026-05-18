@@ -84,7 +84,8 @@ gh repo create CICDPipeline-Demo --public --source=. --remote=origin --push
 * **觸發條件**：必須等 `integration` 階段成功 (`needs: integration`) 才會執行。
 * **執行步驟**：
   1. **登入 GHCR** (GitHub Container Registry)：利用 GitHub Actions 內建的 `GITHUB_TOKEN` 自動登入，無需手動設定密碼。
-  2. **打包並推送**：使用 `docker/build-push-action` 將 `Dockerfile` 編譯成 Image，並打上標籤 (Tag) 上傳至 GitHub Packages 供未來伺服器拉取。
+  2. **環境變數轉換**：使用指令將 GitHub 專案名稱轉為全小寫，以符合 Docker 映像檔的嚴格命名規範。
+  3. **打包並推送**：使用 `docker/build-push-action` 將 `Dockerfile` 編譯成 Image，並使用全小寫名稱打上標籤 (Tag) 上傳至 GitHub Packages 供未來伺服器拉取。
 
 ---
 

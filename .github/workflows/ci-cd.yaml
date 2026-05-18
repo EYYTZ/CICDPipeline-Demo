@@ -46,12 +46,14 @@ jobs:
 
       # Step 4: 執行程式碼風格檢查 (Lint)
       - name: 🔍 Run Linter (Syntax Check)
-        run: python -m py_compile app.py CICDTest.py
+        # 使用萬用字元 *Test.py 讓它檢查所有測試檔
+        run: python -m py_compile app.py *Test.py
 
       # Step 5: 執行自動化測試
       # 如果這個步驟失敗，整個 Pipeline 就會停止，防止壞代碼進入下一個階段
       - name: 🧪 Run Unit Tests
-        run: python -m unittest CICDTest.py
+        # 使用 discover 探索並執行所有結尾是 Test.py 的檔案
+        run: python -m unittest discover -p "*Test.py"
 
   # ==========================================
   # 階段 2: CD (Continuous Deployment) 打包與佈署
