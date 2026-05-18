@@ -1,15 +1,6 @@
 import unittest
-
-# ==========================================
-# 核心功能區：模擬專案中的商業邏輯
-# ==========================================
-def add_numbers(a, b):
-    """將兩個數字相加"""
-    return a + b
-
-def multiply_numbers(a, b):
-    """將兩個數字相乘"""
-    return a * b
+# 從 app.py 匯入我們要測試的函式
+from app import add_numbers, multiply_numbers
 
 # ==========================================
 # 單元測試區：CI 階段將會自動執行這個區塊

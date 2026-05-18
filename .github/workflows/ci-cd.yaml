@@ -46,7 +46,7 @@ jobs:
 
       # Step 4: 執行程式碼風格檢查 (Lint)
       - name: 🔍 Run Linter (Syntax Check)
-        run: python -m py_compile CICDTest.py
+        run: python -m py_compile app.py CICDTest.py
 
       # Step 5: 執行自動化測試
       # 如果這個步驟失敗，整個 Pipeline 就會停止，防止壞代碼進入下一個階段
