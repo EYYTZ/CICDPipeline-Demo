@@ -83,14 +83,19 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Step 1.5: 將 GitHub 儲存庫名稱轉為小寫
+      # 這是為了解決 Docker 映像檔名稱不允許大寫字母的問題 (例如 EYYTZ/CICDPipeline-Demo)
+      - name: 🔠 Convert repository name to lowercase
+        run: echo "REPO_LC=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
+
       # Step 2: 建置 Docker Image 並推送到 GHCR
       - name: 🐳 Build and Push Docker Image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          # 將映像檔名稱改為 ghcr.io/你的帳號/你的專案名稱
-          tags: ghcr.io/${{ github.repository }}:${{ github.sha }}, ghcr.io/${{ github.repository }}:latest
+          # 使用剛剛轉換好的全小寫變數 env.REPO_LC
+          tags: ghcr.io/${{ env.REPO_LC }}:${{ github.sha }}, ghcr.io/${{ env.REPO_LC }}:latest
 
       # Step 3: 登入遠端伺服器進行佈署
       # ⚠️ 目前我們還沒有雲端伺服器，所以先將這段註解掉，專注於完成 Docker 打包與推送
