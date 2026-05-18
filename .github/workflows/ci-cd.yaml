@@ -1,0 +1,114 @@
+# 這是我們 Workflow 的名稱，會顯示在 GitHub Actions 的面板上
+name: Full-Stack CI/CD Pipeline
+
+# 【介面隔離原則 (ISP)】
+# 定義何時要觸發這個 Workflow。我們不希望任何風吹草動都跑完整個流程。
+on:
+  push:
+    # 只有推送到 main 分支時才觸發
+    branches: [ "main" ]
+    # 如果只是改了 README 或文件，不要浪費 CI 資源去跑測試
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  pull_request:
+    branches: [ "main" ]
+
+# 定義流程中的各項工作 (Jobs)
+jobs:
+  # ==========================================
+  # 階段 1: CI (Continuous Integration) 測試與檢查
+  # ==========================================
+  integration:
+    # 【單一職責原則 (SRP)】: 這個 Job 只負責檢查程式碼品質與測試
+    name: Code Quality and Testing
+    # 指定執行的虛擬機環境 (Ubuntu 是最常用且便宜的選擇)
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: 把你的程式碼拉到這台虛擬機裡面
+      # uses 代表使用 GitHub 官方或社群寫好的腳本 (Actions)
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      # Step 2: 設定執行環境 (這裡替換為 Python 環境)
+      # 【依賴反轉原則 (DIP)】: 不依賴系統預設環境，明確指定我們需要的版本
+      - name: ⚙️ Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          # 若未來有 requirements.txt，可以加上 cache: 'pip' 加速執行
+
+      # Step 3: 安裝專案依賴套件
+      - name: 📦 Install Dependencies
+        # 升級 pip。由於目前 CICDTest.py 只用內建 unittest，所以不需額外安裝套件
+        run: python -m pip install --upgrade pip
+
+      # Step 4: 執行程式碼風格檢查 (Lint)
+      - name: 🔍 Run Linter (Syntax Check)
+        run: python -m py_compile CICDTest.py
+
+      # Step 5: 執行自動化測試
+      # 如果這個步驟失敗，整個 Pipeline 就會停止，防止壞代碼進入下一個階段
+      - name: 🧪 Run Unit Tests
+        run: python -m unittest CICDTest.py
+
+  # ==========================================
+  # 階段 2: CD (Continuous Deployment) 打包與佈署
+  # ==========================================
+  deployment:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+    # 【開放封閉原則 (OCP) & 單一職責】
+    # needs 代表這個 Job "依賴" integration 這個 Job。
+    # 只有當 integration (測試) 成功通過後，才會執行 deployment，這保護了我們的伺服器不被壞代碼污染。
+    needs: integration
+    # 只有在推送到 main 分支時才執行佈署 (Pull Request 不會觸發佈署)
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      # Step 1: 登入到 Docker Hub (或是 AWS ECR / GCP GCR)
+      # 【依賴反轉 (DIP) & 安全性】: 絕對不要把帳號密碼寫死在程式碼裡！
+      # 我們將機密資訊存在 GitHub 的 Settings -> Secrets and variables -> Actions 中
+      - name: 🔑 Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Step 2: 建置 Docker Image 並推送到 Registry
+      # 【里氏替換原則 (LSP)】: 打包出來的 Image 是標準化的，不論放到 Staging 或 Production 都能跑
+      - name: 🐳 Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          # 使用 GitHub 的 commit SHA 作為 Image 的標籤 (Tag)，方便未來版本回退 (Rollback)
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/my-fullstack-app:${{ github.sha }}, ${{ secrets.DOCKERHUB_USERNAME }}/my-fullstack-app:latest
+
+      # Step 3: 登入遠端伺服器進行佈署
+      # 實戰中，我們會透過 SSH 連進正式主機，拉取剛剛打包好的 Docker Image 並重啟服務
+      - name: 🚀 Deploy to Production Server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}         # 伺服器 IP
+          username: ${{ secrets.SERVER_USER }}     # 伺服器登入帳號
+          key: ${{ secrets.SERVER_SSH_KEY }}       # 伺服器的 SSH 私鑰
+          # 登入伺服器後要執行的指令 (Command)
+          # 這裡示範拉取最新 Image，並透過 Docker Compose 重啟
+          script: |
+            echo "正在佈署最新版本: ${{ github.sha }}"
+            cd /path/to/your/project/on/server
+            # 替換環境變數檔案 (從 GitHub Secrets 寫入伺服器)
+            echo "DATABASE_URL=${{ secrets.PROD_DATABASE_URL }}" > .env
+            # 登入伺服器上的 Docker
+            echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+            # 拉取剛剛編譯好的最新版本
+            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/my-fullstack-app:latest
+            # 重新啟動服務 (-d 背景執行, --build 強制重建相關資源)
+            docker-compose up -d --build
+            # 清理伺服器上舊的、沒有在使用的 Image，節省空間
+            docker image prune -f
